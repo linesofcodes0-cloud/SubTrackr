@@ -1,6 +1,6 @@
 [package]
 name = "subtrackr-subscription"
-version = "0.3.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["SubTrackr Team"]
 description = "SubTrackr subscription implementation contract (Soroban)"
@@ -11,12 +11,11 @@ path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-soroban-sdk = "21.0.0"
+soroban-sdk = { workspace = true }
 subtrackr-types = { path = "../types" }
-subtrackr-oracle = { path = "../oracle" }
-
-[features]
-extended = []
+serde = { version = "1.0", default-features = false }
 
 [dev-dependencies]
-soroban-sdk = { version = "21.0.0", features = ["testutils"] }
+soroban-sdk = { workspace = true, features = ["testutils"] }
+subtrackr-proxy = { path = "../proxy" }
+subtrackr-storage = { path = "../storage" }

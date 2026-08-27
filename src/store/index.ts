@@ -7,6 +7,7 @@ export { useDunningStore } from './dunningStore';
 export { useWalletStore } from './walletStore';
 export { useNetworkStore } from './networkStore';
 export { useSettingsStore } from './settingsStore';
+export { useUserStore } from './userStore';
 export { useCommunityStore } from './communityStore';
 export { useFraudStore } from './fraudStore';
 export { useGroupStore } from './groupStore';
@@ -20,3 +21,15 @@ export { useLoyaltyStore } from './loyaltyStore';
 export { useSlaStore } from './slaStore';
 export { useGamificationStore } from './gamificationStore';
 export { useThemeStore } from '../theme/themeStore';
+export { usePlanComparisonStore } from './planComparisonStore';
+
+// Context + Hooks pattern exports (Issue #742)
+export {
+  SubscriptionProvider,
+  useSubscriptionContext,
+  useSubscriptions,
+  useSubscriptionStats,
+  useSubscriptionStatus,
+  useSubscriptionActions,
+  useSubscription,
+} from '../context/SubscriptionContext';

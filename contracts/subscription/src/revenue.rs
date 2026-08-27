@@ -342,12 +342,42 @@ pub fn get_revenue_analytics_by_period(
     assert!(period_secs > 0, "period_secs must be > 0");
     assert!(to >= from, "to must be >= from");
 
-    let sub_ids: Vec<u64> = storage_persistent_get(
-        env,
-        storage,
-        StorageKey::RevenueMerchantSubscriptions(merchant.clone()),
-    )
-    .unwrap_or(Vec::new(env));
+    let start_bucket = from / 86_400;
+    let end_bucket = to / 86_400;
+    let mut scanned_sub_ids: Vec<u64> = Vec::new(env);
+
+    for b in start_bucket..=end_bucket {
+        let bucket: Vec<u64> = storage_persistent_get(
+            env,
+            storage,
+            StorageKey::DailyPaymentIndex(merchant.clone(), b),
+        )
+        .unwrap_or(Vec::new(env));
+
+        for id in bucket.iter() {
+            let mut exists = false;
+            for s in scanned_sub_ids.iter() {
+                if s == id {
+                    exists = true;
+                    break;
+                }
+            }
+            if !exists {
+                scanned_sub_ids.push_back(id);
+            }
+        }
+    }
+
+    let sub_ids: Vec<u64> = if scanned_sub_ids.len() > 0 {
+        scanned_sub_ids
+    } else {
+        storage_persistent_get(
+            env,
+            storage,
+            StorageKey::RevenueMerchantSubscriptions(merchant.clone()),
+        )
+        .unwrap_or(Vec::new(env))
+    };
 
     let num_buckets = (to - from).div_ceil(period_secs) as u32;
     let mut buckets: Vec<PeriodRevenue> = Vec::new(env);

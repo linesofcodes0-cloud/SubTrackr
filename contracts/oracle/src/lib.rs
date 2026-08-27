@@ -1,5 +1,4 @@
 #![no_std]
-#![allow(clippy::too_many_arguments)]
 //! SubTrackr price oracle contract.
 //!
 //! A push-style oracle: authorized feed addresses submit signed price
@@ -23,9 +22,8 @@ pub use price::{
 };
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, Env, Symbol,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, Symbol,
 };
-use subtrackr_types::CoreError;
 
 /// Number of consecutive faults that trips a feed's circuit breaker.
 const CIRCUIT_FAULT_LIMIT: u32 = 3;
@@ -50,45 +48,6 @@ pub enum OracleError {
     CircuitOpen = 10,
     NoHistory = 11,
     InvalidConfig = 12,
-}
-
-impl From<OracleError> for CoreError {
-    fn from(err: OracleError) -> Self {
-        match err {
-            OracleError::AlreadyInitialized => CoreError::AlreadyInitialized,
-            OracleError::NotInitialized => CoreError::NotInitialized,
-            OracleError::Unauthorized => CoreError::Unauthorized,
-            OracleError::FeedNotFound => CoreError::FeedNotFound,
-            OracleError::FeedExists => CoreError::FeedExists,
-            OracleError::InvalidPrice => CoreError::InvalidPrice,
-            OracleError::InvalidTimestamp => CoreError::InvalidTimestamp,
-            OracleError::NoPriceAvailable => CoreError::NoPriceAvailable,
-            OracleError::StalePrice => CoreError::StalePrice,
-            OracleError::CircuitOpen => CoreError::CircuitOpen,
-            OracleError::NoHistory => CoreError::NoHistory,
-            OracleError::InvalidConfig => CoreError::InvalidConfig,
-        }
-    }
-}
-
-impl From<CoreError> for OracleError {
-    fn from(err: CoreError) -> Self {
-        match err {
-            CoreError::AlreadyInitialized => OracleError::AlreadyInitialized,
-            CoreError::NotInitialized => OracleError::NotInitialized,
-            CoreError::Unauthorized => OracleError::Unauthorized,
-            CoreError::FeedNotFound => OracleError::FeedNotFound,
-            CoreError::FeedExists => OracleError::FeedExists,
-            CoreError::InvalidPrice => OracleError::InvalidPrice,
-            CoreError::InvalidTimestamp => OracleError::InvalidTimestamp,
-            CoreError::NoPriceAvailable => OracleError::NoPriceAvailable,
-            CoreError::StalePrice => OracleError::StalePrice,
-            CoreError::CircuitOpen => OracleError::CircuitOpen,
-            CoreError::NoHistory => OracleError::NoHistory,
-            CoreError::InvalidConfig => OracleError::InvalidConfig,
-            _ => OracleError::InvalidConfig,
-        }
-    }
 }
 
 #[contracttype]
@@ -348,120 +307,6 @@ impl SubTrackrOracle {
     /// Reads a feed's configuration.
     pub fn get_feed(env: Env, token: Symbol, quote: Symbol) -> Result<FeedConfig, OracleError> {
         Self::load_feed(&env, &token, &quote)
-    }
-
-    // ── Multi-Chain Oracle Support ──
-
-    /// Registers a feed with chain context for cross-chain price tracking.
-    /// Chain-aware feeds allow the oracle to serve prices specific to a chain.
-    pub fn register_chain_feed(
-        env: Env,
-        token: Symbol,
-        quote: Symbol,
-        chain_id: u64,
-        primary: Address,
-        fallback: Option<Address>,
-        max_staleness_secs: u64,
-        deviation_threshold_bps: u32,
-        decimals: u32,
-    ) -> Result<(), OracleError> {
-        let admin = Self::require_admin(&env)?;
-        admin.require_auth();
-
-        // Create a chain-specific symbol from the chain_id
-        let chain_sym = Symbol::new(&env, &format!("chain_{}", chain_id));
-        let pair_token = Symbol::new(&env, &format!("{}_{}", token.to_string(), chain_sym.to_string()));
-
-        if max_staleness_secs == 0 || decimals > 18 {
-            return Err(OracleError::InvalidConfig);
-        }
-
-        let cfg = FeedConfig {
-            token: pair_token.clone(),
-            quote: quote.clone(),
-            primary,
-            fallback,
-            max_staleness_secs,
-            deviation_threshold_bps,
-            decimals,
-        };
-
-        env.storage()
-            .persistent()
-            .set(&DataKey::Feed(pair_token.clone(), quote.clone()), &cfg);
-        env.storage()
-            .persistent()
-            .set(&DataKey::Circuit(pair_token, quote), &CircuitState::closed());
-        Ok(())
-    }
-
-    /// Submit price with chain context. Allows different chains to have different
-    /// price observations for the same token/quote pair.
-    pub fn submit_chain_price(
-        env: Env,
-        source: Address,
-        token: Symbol,
-        quote: Symbol,
-        chain_id: u64,
-        value: i128,
-        timestamp: u64,
-    ) -> Result<(), OracleError> {
-        let chain_sym_str = format!("chain_{}", chain_id);
-        let chain_sym = Symbol::new(&env, &chain_sym_str);
-        let pair_token = Symbol::new(&env, &format!("{}_{}", token.to_string(), chain_sym.to_string()));
-        Self::submit_price(env, source, pair_token, quote, value, timestamp)
-    }
-
-    /// Get price for a specific chain context.
-    pub fn get_chain_price(
-        env: Env,
-        token: Symbol,
-        quote: Symbol,
-        chain_id: u64,
-    ) -> Result<Price, OracleError> {
-        let chain_sym = Symbol::new(&env, &format!("chain_{}", chain_id));
-        let pair_token = Symbol::new(&env, &format!("{}_{}", token.to_string(), chain_sym.to_string()));
-        Self::get_price(env, pair_token, quote)
-    }
-
-    /// Get cached price with chain context.
-    pub fn get_chain_price_with_cache(
-        env: Env,
-        token: Symbol,
-        quote: Symbol,
-        chain_id: u64,
-        ttl: u64,
-    ) -> Result<Price, OracleError> {
-        let chain_sym = Symbol::new(&env, &format!("chain_{}", chain_id));
-        let pair_token = Symbol::new(&env, &format!("{}_{}", token.to_string(), chain_sym.to_string()));
-        Self::get_price_with_cache(env, pair_token, quote, ttl)
-    }
-
-    /// Aggregate prices across multiple chains for the same token/quote pair.
-    /// Returns the median price across all specified chains.
-    pub fn get_aggregate_price(
-        env: Env,
-        token: Symbol,
-        quote: Symbol,
-        chain_ids: soroban_sdk::Vec<u64>,
-    ) -> Result<Price, OracleError> {
-        let mut prices: soroban_sdk::Vec<Price> = soroban_sdk::Vec::new(&env);
-        let mut last_error: Option<OracleError> = None;
-
-        for chain_id in chain_ids.iter() {
-            match Self::get_chain_price(env.clone(), token.clone(), quote.clone(), chain_id) {
-                Ok(price) => prices.push_back(price),
-                Err(e) => last_error = Some(e),
-            }
-        }
-
-        if prices.is_empty() {
-            return Err(last_error.unwrap_or(OracleError::NoPriceAvailable));
-        }
-
-        // Return the first valid price as aggregate
-        // In production, implement median calculation
-        Ok(prices.get(0).unwrap())
     }
 
     // ---- internal helpers -------------------------------------------------

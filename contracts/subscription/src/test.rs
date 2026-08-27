@@ -52,3 +52,54 @@ fn test_mev_commit_reveal_flow() {
     let res = client.try_reveal_charge(&proxy, &storage, &sub_id, &expected_gas_bid, &is_private_mempool);
     assert!(res.is_err());
 }
+
+#[test]
+fn test_get_contract_health() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let proxy = Address::generate(&env);
+    let storage = Address::generate(&env);
+    let admin = Address::generate(&env);
+
+    let contract_id = env.register_contract(None, SubTrackrSubscription);
+    let client = SubTrackrSubscriptionClient::new(&env, &contract_id);
+
+    client.initialize(&proxy, &storage, &admin);
+
+    let health = client.get_contract_health(&storage);
+    assert_eq!(health.version, String::from_str(&env, "2.0.0"));
+    assert_eq!(health.is_paused, false);
+    assert_eq!(health.is_creation_paused, false);
+    assert_eq!(health.treasury_balance, 0);
+    assert_eq!(health.active_payment_count, 0);
+    assert_eq!(health.merchant_registry_configured, true);
+}
+
+#[test]
+fn test_daily_payment_index() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let proxy = Address::generate(&env);
+    let storage = Address::generate(&env);
+    let admin = Address::generate(&env);
+    let merchant = Address::generate(&env);
+
+    let contract_id = env.register_contract(None, SubTrackrSubscription);
+    let client = SubTrackrSubscriptionClient::new(&env, &contract_id);
+
+    client.initialize(&proxy, &storage, &admin);
+
+    // Verify revenue analytics with daily payment index date buckets
+    let analytics = revenue::get_revenue_analytics_by_period(
+        &env,
+        &storage,
+        &merchant,
+        86400,
+        0,
+        259200, // 3 days
+    );
+    assert_eq!(analytics.len(), 3);
+}
+

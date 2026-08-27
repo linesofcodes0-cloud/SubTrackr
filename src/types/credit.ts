@@ -1,94 +1,124 @@
-export enum CreditNoteStatus {
-  DRAFT = 'draft',
-  ISSUED = 'issued',
-  PARTIALLY_APPLIED = 'partially_applied',
-  APPLIED = 'applied',
-  EXPIRED = 'expired',
-  VOID = 'void',
+export type CreditPaymentMethod = 'card' | 'bank_transfer' | 'wallet' | 'manual' | 'crypto';
+
+export type CreditLedgerEntryType =
+  | 'purchase'
+  | 'application'
+  | 'expiration'
+  | 'transfer_in'
+  | 'transfer_out'
+  | 'adjustment';
+
+export type CreditApplicationStatus = 'partial' | 'paid';
+
+export interface CreditPolicy {
+  expirationDays: number;
+  transferable: boolean;
+  autoApplyToUpcomingInvoices: boolean;
+  allowPartialApplication: boolean;
 }
 
-export enum CreditNoteReason {
-  REFUND = 'refund',
-  OVERPAYMENT = 'overpayment',
-  PROMOTIONAL = 'promotional',
-  COMPENSATION = 'compensation',
-  ADJUSTMENT = 'adjustment',
-}
-
-export enum CreditApplicationStatus {
-  PENDING = 'pending',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-  REVERSED = 'reversed',
-}
-
-export interface CreditNote {
+export interface CreditLot {
   id: string;
-  subscriptionId: string;
-  userId: string;
-  reason: CreditNoteReason;
-  amount: number;
-  remainingAmount: number;
-  currency: string;
-  status: CreditNoteStatus;
-  issuedAt: Date;
-  expiresAt: Date;
-  appliedAt?: Date;
-  appliedToInvoiceIds: string[];
-  notes?: string;
-  priority: number;
+  amountRemaining: number;
+  originalAmount: number;
   createdAt: Date;
-  updatedAt: Date;
+  expiresAt: Date | null;
+  paymentMethod: CreditPaymentMethod;
+  reference?: string;
+  note?: string;
 }
 
-export interface CreditNoteApplication {
+export interface CreditLedgerEntry {
   id: string;
-  creditNoteId: string;
-  invoiceId: string;
-  amount: number;
-  status: CreditApplicationStatus;
-  appliedAt: Date;
-  reversedAt?: Date;
-}
-
-export interface PrepaymentWallet {
-  id: string;
-  subscriptionId: string;
-  userId: string;
-  currency: string;
-  balance: number;
-  totalDeposited: number;
-  totalWithdrawn: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface PrepaymentTransaction {
-  id: string;
-  walletId: string;
-  type: 'deposit' | 'withdraw' | 'drawdown';
+  accountId: string;
+  type: CreditLedgerEntryType;
   amount: number;
   balanceAfter: number;
+  runningTotal: number;
+  currency: string;
+  createdAt: Date;
+  expiresAt?: Date | null;
+  subscriptionId?: string;
   invoiceId?: string;
-  timestamp: Date;
+  relatedAccountId?: string;
+  paymentMethod?: CreditPaymentMethod;
+  reference?: string;
+  note?: string;
 }
 
-export interface CreditNoteReport {
-  generatedAt: Date;
-  totalIssued: number;
+export interface CreditInvoiceApplication {
+  id: string;
+  accountId: string;
+  subscriptionId: string;
+  invoiceId: string;
+  invoiceTotal: number;
+  appliedAmount: number;
+  remainingDue: number;
+  status: CreditApplicationStatus;
+  runningBalanceAfter: number;
+  createdAt: Date;
+}
+
+export interface CreditAccountState {
+  accountId: string;
+  currency: string;
+  balance: number;
+  runningTotal: number;
+  totalPurchased: number;
   totalApplied: number;
   totalExpired: number;
-  totalOutstanding: number;
-  creditNotes: {
-    issued: CreditNote[];
-    applied: CreditNote[];
-    expired: CreditNote[];
-    outstanding: CreditNote[];
-  };
+  totalTransferredIn: number;
+  totalTransferredOut: number;
+  revision: number;
+  policy: CreditPolicy;
+  lots: CreditLot[];
+  ledger: CreditLedgerEntry[];
+  applications: CreditInvoiceApplication[];
+  nextExpirationAt: Date | null;
 }
 
-export const isValidCreditNoteStatus = (status: string): status is CreditNoteStatus =>
-  Object.values(CreditNoteStatus).includes(status as CreditNoteStatus);
+export interface CreditPurchaseInput {
+  amount: number;
+  paymentMethod: CreditPaymentMethod;
+  currency?: string;
+  subscriptionId?: string;
+  invoiceId?: string;
+  reference?: string;
+  note?: string;
+  expiresAt?: Date | null;
+  expectedRevision?: number;
+}
 
-export const isValidCreditNoteReason = (reason: string): reason is CreditNoteReason =>
-  Object.values(CreditNoteReason).includes(reason as CreditNoteReason);
+export interface CreditTransferInput {
+  amount: number;
+  currency?: string;
+  reference?: string;
+  note?: string;
+  expectedRevision?: number;
+}
+
+export interface CreditApplicationInput {
+  invoiceId: string;
+  subscriptionId: string;
+  invoiceTotal: number;
+  currency?: string;
+  reference?: string;
+  note?: string;
+  expectedRevision?: number;
+  now?: Date;
+}
+
+export interface CreditExpirationResult {
+  account: CreditAccountState;
+  expiredAmount: number;
+  expiredLotIds: string[];
+  notificationMessage: string | null;
+}
+
+export interface CreditApplicationResult {
+  account: CreditAccountState;
+  application: CreditInvoiceApplication | null;
+  appliedAmount: number;
+  remainingDue: number;
+  autoApplied: boolean;
+}

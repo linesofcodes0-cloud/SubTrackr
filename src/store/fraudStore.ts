@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { asyncStorageAdapter } from '../utils/storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   FraudAction,
   FraudAnalytics,
@@ -11,7 +11,6 @@ import {
   FraudRiskScore,
   FraudReviewStatus,
   FraudSubscriptionRecord,
-  FraudSignal,
 } from '../types/fraud';
 
 const STORAGE_KEY = 'subtrackr-fraud-store';
@@ -484,6 +483,7 @@ const scoreSubscription = (
   };
 };
 
+
 const computeAnalytics = (
   subscriptions: FraudSubscriptionRecord[],
   reviewQueue: FraudCase[]
@@ -585,6 +585,18 @@ const buildMerchantReport = (
     pendingEvidenceCount: scopedCases.filter((item) => (item.evidence?.length ?? 0) === 0).length,
     falsePositiveFeedbackCount: scopedCases.filter((item) => item.outcome === 'false_positive')
       .length,
+    velocityAlerts: scoped.filter((item) =>
+      item.signals.some((signal) => signal.kind === 'velocity')
+    ).length,
+    anomalyAlerts: scoped.filter((item) =>
+      item.signals.some((signal) => signal.kind === 'usage-anomaly')
+    ).length,
+    chargebackPredictions: scoped.filter((item) =>
+      item.signals.some((signal) => signal.kind === 'chargeback')
+    ).length,
+    highRiskSubscribers: new Set(
+      scoped.filter((item) => item.riskScore >= 50).map((item) => item.subscriberId)
+    ).size,
     recentCases: scopedCases.slice(0, 5),
   };
 };
@@ -641,6 +653,33 @@ export const useFraudStore = create<FraudState>()(
                     : 'healthy',
             };
           }),
+          analytics: computeAnalytics(subscriptions, reviewQueue),
+          assessments: hydrateAssessments(subscriptions),
+          merchants: merchants.map((merchant) => ({
+            ...merchant,
+            averageRisk: buildMerchantReport(merchants, subscriptions, reviewQueue, merchant.id)
+              .averageRisk,
+            blockedSubscriptions: buildMerchantReport(
+              merchants,
+              subscriptions,
+              reviewQueue,
+              merchant.id
+            ).blockedSubscriptions,
+            activeSubscriptions: buildMerchantReport(
+              merchants,
+              subscriptions,
+              reviewQueue,
+              merchant.id
+            ).totalSubscriptions,
+            status:
+              buildMerchantReport(merchants, subscriptions, reviewQueue, merchant.id).averageRisk >=
+              60
+                ? 'high-risk'
+                : buildMerchantReport(merchants, subscriptions, reviewQueue, merchant.id)
+                      .averageRisk >= 35
+                  ? 'watch'
+                  : 'healthy',
+          })),
         });
       },
 
@@ -667,6 +706,7 @@ export const useFraudStore = create<FraudState>()(
         if (!current) return;
 
         const score = scoreSubscription(current, subscriptions);
+        const score = scoreSubscription(current);
         const action: FraudAction = score.totalScore >= 80 ? 'block' : 'flag';
         const status: FraudReviewStatus = score.totalScore >= 80 ? 'escalated' : 'pending';
         const nextCase: FraudCase = {
@@ -732,6 +772,16 @@ export const useFraudStore = create<FraudState>()(
             };
             return reviewedCase;
           });
+          const reviewQueue = state.reviewQueue.map((entry) =>
+            entry.subscriptionId === subscriptionId
+              ? {
+                  ...entry,
+                  status: 'reviewed' as FraudReviewStatus,
+                  action: 'approve' as FraudAction,
+                  updatedAt: nowIso(),
+                }
+              : entry
+          );
           return {
             subscriptions,
             reviewQueue,
@@ -760,6 +810,16 @@ export const useFraudStore = create<FraudState>()(
             };
             return escalatedCase;
           });
+          const reviewQueue = state.reviewQueue.map((entry) =>
+            entry.subscriptionId === subscriptionId
+              ? {
+                  ...entry,
+                  status: 'escalated' as FraudReviewStatus,
+                  action: 'block' as FraudAction,
+                  updatedAt: nowIso(),
+                }
+              : entry
+          );
           return {
             subscriptions,
             reviewQueue,
@@ -825,6 +885,21 @@ export const useFraudStore = create<FraudState>()(
             };
             return dismissedCase;
           });
+
+          const reviewQueue = state.reviewQueue.map((entry) =>
+            entry.subscriptionId === subscriptionId
+              ? {
+                  ...entry,
+                  action,
+                  status: (action === 'approve'
+                    ? 'reviewed'
+                    : action === 'block'
+                      ? 'escalated'
+                      : 'pending') satisfies FraudReviewStatus,
+                  updatedAt: nowIso(),
+                }
+              : entry
+          );
           return {
             subscriptions,
             reviewQueue,
@@ -838,7 +913,7 @@ export const useFraudStore = create<FraudState>()(
     }),
     {
       name: STORAGE_KEY,
-      storage: createJSONStorage(() => asyncStorageAdapter),
+      storage: createJSONStorage(() => AsyncStorage),
     }
   )
 );

@@ -2,48 +2,34 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
+// ─── Tree-shaking / minification ─────────────────────────────────────────────
+// Enable minification in production so unused code paths are removed by the
+// Metro bundler's inline-requires and dead-code-elimination passes.
 config.transformer = {
   ...config.transformer,
-  experimentalImportBundleSupport: true,
-  hermesEnabled: true,
-  unstable_transformImportMeta: true,
+  // Inline requires defers module evaluation until first use — this effectively
+  // implements lazy loading for heavy modules (ethers, stellar-sdk, etc.)
+  // and removes them from the critical path entirely when not needed.
   getTransformOptions: async () => ({
     transform: {
-      experimentalImportSupport: true,
+      experimentalImportSupport: false,
       inlineRequires: true,
     },
   }),
 };
 
-if (process.env.NODE_ENV === 'production') {
-  config.transformer.minifierConfig = {
-    compress: {
-      drop_console: true,
-      drop_debugger: true,
-      pure_funcs: ['console.info', 'console.debug', 'console.trace'],
-    },
-  };
-  try {
-    const hermesSerializer = require('@shopify/metro-serializer-hermes');
-    config.serializer.customSerializer = hermesSerializer.serializer;
-  } catch (e) {
-    // Serializer not available, continue without it
-  }
-}
+// ─── Resolver: platform-specific module aliases ───────────────────────────────
+// Prefer the ES-module (tree-shakeable) entry point for libraries that ship
+// both CJS and ESM builds.
+config.resolver = {
+  ...config.resolver,
+  // Prioritise .mjs then .js so bundler picks up ESM where available
+  sourceExts: ['mjs', 'js', 'jsx', 'ts', 'tsx', 'cjs', 'json'],
+};
 
-config.resolver.sourceExts = [...config.resolver.sourceExts, 'mjs'];
-config.resolver.unstable_enablePackageExports = true;
-
-// Exclude non-bundle directories from Metro bundling
-config.resolver.blockList = [
-  /backend\/.*/,
-  /app\/.*/,
-  /developer-portal\/.*/,
-  /contracts\/.*/,
-  /chaos\/.*/,
-  /sandbox\/.*/,
-  /ml-service\/.*/,
-  /src\/design-system\/.*/,
-];
+// ─── Bundle analyser ──────────────────────────────────────────────────────────
+// To analyse bundle size locally, run:
+//   npx react-native-bundle-visualizer
+// (metro-bundle-analyzer was removed — it was never published to npm)
 
 module.exports = config;

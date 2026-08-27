@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Gas Optimization and Targeting Module
 //! Provides optimization recommendations and tracks gas targets.
 
