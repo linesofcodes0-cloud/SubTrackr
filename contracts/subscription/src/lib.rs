@@ -14,6 +14,8 @@ pub mod gas_storage;
 pub mod invoice_branding;
 pub mod loyalty;
 pub mod payment;
+pub mod payment_link;
+pub mod payment_link_test;
 pub mod payment_methods;
 pub mod plan;
 pub mod plan_templates;

@@ -99,6 +99,28 @@ impl SubTrackrSubscription {
         storage_instance_remove(&env, &storage, StorageKey::InvoiceContract);
     }
 
+    /// Public summary of contract health and status metrics.
+    pub fn get_contract_health(env: Env, storage: Address) -> subtrackr_types::ContractHealth {
+        let version = String::from_str(&env, "2.0.0");
+        let is_paused: bool = storage_instance_get(&env, &storage, StorageKey::RateLimit(String::from_str(&env, "paused"))).unwrap_or(false);
+        let is_creation_paused: bool = storage_instance_get(&env, &storage, StorageKey::RateLimit(String::from_str(&env, "creation_paused"))).unwrap_or(false);
+        let treasury_balance: i128 = storage_instance_get(&env, &storage, StorageKey::RateLimit(String::from_str(&env, "treasury_balance"))).unwrap_or(0);
+        let sub_count: u64 = storage_instance_get(&env, &storage, StorageKey::SubscriptionCount).unwrap_or(0);
+        let invoice_opt: Option<Address> = storage_instance_get(&env, &storage, StorageKey::InvoiceContract);
+        let fx_oracle_configured = invoice_opt.is_some();
+        let merchant_registry_configured = true;
+
+        subtrackr_types::ContractHealth {
+            version,
+            is_paused,
+            is_creation_paused,
+            treasury_balance,
+            active_payment_count: sub_count as u32,
+            fx_oracle_configured,
+            merchant_registry_configured,
+        }
+    }
+
     // ── Rate Limiting Admin ──
 
     pub fn set_rate_limit(

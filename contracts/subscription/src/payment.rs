@@ -112,6 +112,22 @@ pub fn charge_subscription(env: &Env, storage: &Address, subscription_id: u64) {
     revenue::update_merchant_revenue_balances(env, storage, &plan.merchant, 0, charge_price);
     revenue::track_merchant_subscription(env, storage, &plan.merchant, subscription_id);
 
+    // Update DailyPaymentIndex for analytics range queries
+    let date_bucket = now / 86_400;
+    let mut daily_index: Vec<u64> = storage_persistent_get(
+        env,
+        storage,
+        StorageKey::DailyPaymentIndex(plan.merchant.clone(), date_bucket),
+    )
+    .unwrap_or(Vec::new(env));
+    daily_index.push_back(subscription_id);
+    storage_persistent_set(
+        env,
+        storage,
+        StorageKey::DailyPaymentIndex(plan.merchant.clone(), date_bucket),
+        daily_index,
+    );
+
     env.events().publish(
         (String::from_str(env, "subscription_charged"), subscription_id),
         (sub.subscriber.clone(), charge_price, 100_000u64, now),

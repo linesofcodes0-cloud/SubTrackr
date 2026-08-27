@@ -305,6 +305,19 @@ pub struct MevProtectionConfig {
     pub gas_price_alert_threshold: u64,
 }
 
+/// Health and key metrics summary of the contract state.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct ContractHealth {
+    pub version: String,
+    pub is_paused: bool,
+    pub is_creation_paused: bool,
+    pub treasury_balance: i128,
+    pub active_payment_count: u32,
+    pub fx_oracle_configured: bool,
+    pub merchant_registry_configured: bool,
+}
+
 /// Pending commit-reveal envelope for a subscription charge.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -413,6 +426,9 @@ pub enum StorageKey {
     UserPaymentMethods(Address),
     PaymentMethodEntry(Address, u64),
     PaymentMethodCount(Address),
+
+    // Daily payment timestamp index: (merchant_id, date_bucket) -> Vec<payment_id>
+    DailyPaymentIndex(Address, u64),
 }
 
 #[contracttype]
